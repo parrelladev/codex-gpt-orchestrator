@@ -4,6 +4,45 @@ Plataforma local em TypeScript: o Codex delega pelo MCP stdio; um servidor HTTP 
 
 **Versão experimental 0.1.0.** O fluxo real foi validado com um, dois e três agentes no Windows. A automação depende do DOM do ChatGPT e pode exigir manutenção quando a interface mudar; não há garantia de disponibilidade ou respostas sem falhas. Consulte [as evidências](docs/verification.md) e [as limitações](docs/architecture.md).
 
+## Como funciona
+
+```mermaid
+flowchart TD
+    USER["Usuário"] --> CODEX["Codex orquestrador<br/>Planeja, divide o trabalho e escolhe os agentes"]
+    CODEX <-->|"Ferramentas via stdio"| MCP["Servidor MCP"]
+    MCP <-->|"HTTP autenticado"| SERVER["Task Server<br/>127.0.0.1:3333"]
+
+    SERVER <--> QUEUE["Fila de tarefas<br/>Reservas, heartbeat e timeouts"]
+    QUEUE <--> DB[("SQLite<br/>Histórico persistente")]
+    SERVER --> MANAGER["Browser Manager<br/>Cria, reutiliza e limita agentes"]
+
+    subgraph CHROME["Chrome dedicado — perfil compartilhado"]
+        A1["Agente 1<br/>ChatGPT + Tampermonkey"]
+        A2["Agente 2<br/>ChatGPT + Tampermonkey"]
+        AN["Agente N<br/>ChatGPT + Tampermonkey"]
+        OTHER["Google e outras abas desconhecidas<br/>Preservadas pelo gerenciador"]
+    end
+
+    MANAGER -.->|"CDP em localhost"| A1
+    MANAGER -.-> A2
+    MANAGER -.-> AN
+    SERVER <-->|"Tarefas e respostas"| A1
+    SERVER <--> A2
+    SERVER <--> AN
+
+    CODEX --> REVIEW["Revisa as respostas, integra arquivos<br/>e executa testes no workspace"]
+    REVIEW --> DELIVERY["Entrega o resultado ao usuário"]
+
+    classDef orchestrator fill:#dbeafe,stroke:#2563eb,color:#172554
+    classDef agent fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef preserved fill:#f1f5f9,stroke:#94a3b8,color:#334155
+    class CODEX,REVIEW orchestrator
+    class A1,A2,AN agent
+    class OTHER preserved
+```
+
+O Codex escolhe a quantidade de agentes conforme os trabalhos independentes e os limites configurados. O gerenciador abre somente as abas necessárias; cada ponte reserva uma tarefa, envia a pergunta ao ChatGPT e devolve a resposta pelo servidor local. O Codex consulta os resultados via MCP, confere o conteúdo e realiza a integração e os testes. As abas GPT não recebem acesso ao terminal ou aos arquivos do computador.
+
 ## Instalação e inicialização no Windows
 
 Node **24 LTS recomendado**; mínimo 22.13. A instalação foi verificada com Node 24.14.1 e npm 11.11.0. O SQLite nativo pode emitir aviso experimental nessa versão. Dependências locais fixadas em package-lock.json; não é necessário instalar navegadores Playwright nem compiladores C++.
