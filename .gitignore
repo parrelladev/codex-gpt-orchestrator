@@ -16,3 +16,4 @@ coverage/
 *.pfx
 playwright-report/
 test-results/
+projetos/
